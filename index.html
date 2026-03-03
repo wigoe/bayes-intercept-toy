@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bayesian Intercept Decision Toy</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="titleBlock">
+      <h1>Bayesian “Shoot / Hold” Decision</h1>
+      <p class="subtitle">
+        A toy model: Bayes posterior + expected-cost decision threshold + Monte Carlo outcomes.
+      </p>
+    </div>
+    <div class="badge">Runs 100% in-browser</div>
+  </header>
+
+  <main class="grid">
+    <!-- Controls -->
+    <section class="card">
+      <h2>Inputs</h2>
+
+      <div class="row">
+        <label>Prior P(Threat)</label>
+        <input id="pT" type="range" min="0.001" max="0.5" step="0.001" value="0.05" />
+        <div class="val" id="pTVal"></div>
+      </div>
+
+      <div class="row">
+        <label>Sensor P(Evidence | Threat)</label>
+        <input id="pE_T" type="range" min="0.05" max="0.99" step="0.01" value="0.80" />
+        <div class="val" id="pE_TVal"></div>
+      </div>
+
+      <div class="row">
+        <label>Sensor P(Evidence | Decoy)</label>
+        <input id="pE_D" type="range" min="0.01" max="0.95" step="0.01" value="0.30" />
+        <div class="val" id="pE_DVal"></div>
+      </div>
+
+      <hr class="sep">
+
+      <div class="row">
+        <label>Interceptor cost C<sub>shot</sub> (relative)</label>
+        <input id="cShot" type="range" min="1" max="500" step="1" value="25" />
+        <div class="val" id="cShotVal"></div>
+      </div>
+
+      <div class="row">
+        <label>Damage cost C<sub>hit</sub> (relative)</label>
+        <input id="cHit" type="range" min="50" max="50000" step="50" value="5000" />
+        <div class="val" id="cHitVal"></div>
+      </div>
+
+      <div class="row">
+        <label>Scarcity multiplier (magazine depth)</label>
+        <input id="scarcity" type="range" min="1" max="10" step="0.5" value="1" />
+        <div class="val" id="scarcityVal"></div>
+      </div>
+
+      <hr class="sep">
+
+      <div class="row">
+        <label>Monte Carlo trials</label>
+        <input id="trials" type="range" min="100" max="50000" step="100" value="10000" />
+        <div class="val" id="trialsVal"></div>
+      </div>
+
+      <div class="row">
+        <label>Evidence strength (likelihood ratio noise)</label>
+        <input id="noise" type="range" min="0" max="2.0" step="0.05" value="0.60" />
+        <div class="val" id="noiseVal"></div>
+      </div>
+
+      <div class="actions">
+        <button id="runBtn">Run Monte Carlo</button>
+        <button id="resetBtn" class="secondary">Reset</button>
+      </div>
+
+      <p class="hint">
+        Decision rule: engage if <code>P(Threat|E) × C_hit &gt; C_shot × scarcity</code>
+      </p>
+    </section>
+
+    <!-- Posterior & decision -->
+    <section class="card">
+      <h2>Bayes Update</h2>
+
+      <div class="kpi">
+        <div class="kpiLabel">Posterior P(Threat | Evidence)</div>
+        <div class="kpiValue" id="posterior"></div>
+      </div>
+
+      <div class="kpi">
+        <div class="kpiLabel">Threshold (Cshot×scarcity / Chit)</div>
+        <div class="kpiValue" id="threshold"></div>
+      </div>
+
+      <div class="kpi">
+        <div class="kpiLabel">Decision</div>
+        <div class="kpiValue" id="decision"></div>
+      </div>
+
+      <div class="mathbox">
+        <div><strong>Bayes:</strong></div>
+        <div class="mono">P(T|E) = (P(E|T)P(T)) / (P(E|T)P(T) + P(E|D)P(D))</div>
+        <div class="mono">Numerator: <span id="numVal"></span></div>
+        <div class="mono">Denominator: <span id="denVal"></span></div>
+      </div>
+
+      <p class="note">
+        As scarcity rises, effective shot cost rises, so the model demands higher confidence before shooting.
+      </p>
+    </section>
+
+    <!-- Monte Carlo results -->
+    <section class="card wide">
+      <h2>Monte Carlo Outcomes</h2>
+
+      <div class="mcGrid">
+        <div class="mcCard">
+          <div class="mcLabel">Shots fired</div>
+          <div class="mcValue" id="mcShots"></div>
+          <div class="mcSmall" id="mcShotsPct"></div>
+        </div>
+
+        <div class="mcCard">
+          <div class="mcLabel">Wasted shots on decoys</div>
+          <div class="mcValue" id="mcWaste"></div>
+          <div class="mcSmall" id="mcWastePct"></div>
+        </div>
+
+        <div class="mcCard">
+          <div class="mcLabel">Threats engaged (hits prevented)</div>
+          <div class="mcValue" id="mcStops"></div>
+          <div class="mcSmall" id="mcStopsPct"></div>
+        </div>
+
+        <div class="mcCard">
+          <div class="mcLabel">Threats NOT engaged (hits)</div>
+          <div class="mcValue" id="mcHits"></div>
+          <div class="mcSmall" id="mcHitsPct"></div>
+        </div>
+      </div>
+
+      <div class="mcSummary mono" id="mcSummary"></div>
+
+      <p class="hint">
+        Monte Carlo generates a stream of “tracks.” Each track is threat or decoy (by the prior), then produces noisy evidence
+        consistent with the sensor settings. The model applies the Bayes + threshold rule to decide.
+      </p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Made for learning: Bayes + expected loss under scarcity.</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -7,6 +7,7 @@ function fmtInt(x) { return Math.round(x).toLocaleString(); }
 function fmtNum(x) { return Number(x).toLocaleString(); }
 
 const els = {
+  // Inputs
   pT: document.getElementById("pT"),
   pE_T: document.getElementById("pE_T"),
   pE_D: document.getElementById("pE_D"),
@@ -14,8 +15,10 @@ const els = {
   cHit: document.getElementById("cHit"),
   scarcity: document.getElementById("scarcity"),
   trials: document.getElementById("trials"),
+  magazine: document.getElementById("magazine"),
   noise: document.getElementById("noise"),
 
+  // Input value labels
   pTVal: document.getElementById("pTVal"),
   pE_TVal: document.getElementById("pE_TVal"),
   pE_DVal: document.getElementById("pE_DVal"),
@@ -23,18 +26,21 @@ const els = {
   cHitVal: document.getElementById("cHitVal"),
   scarcityVal: document.getElementById("scarcityVal"),
   trialsVal: document.getElementById("trialsVal"),
+  magazineVal: document.getElementById("magazineVal"),
   noiseVal: document.getElementById("noiseVal"),
 
+  // Bayes panel
   posterior: document.getElementById("posterior"),
   threshold: document.getElementById("threshold"),
   decision: document.getElementById("decision"),
-
   numVal: document.getElementById("numVal"),
   denVal: document.getElementById("denVal"),
 
+  // Buttons
   runBtn: document.getElementById("runBtn"),
   resetBtn: document.getElementById("resetBtn"),
 
+  // Monte Carlo outputs
   mcShots: document.getElementById("mcShots"),
   mcShotsPct: document.getElementById("mcShotsPct"),
   mcWaste: document.getElementById("mcWaste"),
@@ -43,6 +49,8 @@ const els = {
   mcStopsPct: document.getElementById("mcStopsPct"),
   mcHits: document.getElementById("mcHits"),
   mcHitsPct: document.getElementById("mcHitsPct"),
+  mcDeplete: document.getElementById("mcDeplete"),
+  mcDepleteNote: document.getElementById("mcDepleteNote"),
   mcSummary: document.getElementById("mcSummary"),
 };
 
@@ -56,16 +64,13 @@ function bayesPosterior(pT, pE_T, pE_D) {
 
 function decisionEngage(posterior, cShot, cHit, scarcity) {
   const effectiveShot = cShot * scarcity;
-  // Engage if expected hold loss > engage loss.
   const holdLoss = posterior * cHit;
   const engageLoss = effectiveShot;
   return { engage: (holdLoss > engageLoss), holdLoss, engageLoss };
 }
 
-// Small helper to generate a noisy log-likelihood ratio around the "base" LR.
-// LR = P(E|T)/P(E|D). noise controls spread.
+// lognormal noise around base LR
 function sampleLikelihoodRatio(baseLR, noise) {
-  // lognormal noise: LR' = baseLR * exp(N(0, noise))
   const z = randn();
   return baseLR * Math.exp(z * noise);
 }
@@ -78,7 +83,7 @@ function randn() {
   return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
 }
 
-// Given prior odds and an LR, compute posterior probability.
+// odds form
 function posteriorFromOdds(priorP, lr) {
   const priorOdds = priorP / (1 - priorP);
   const postOdds = priorOdds * lr;
@@ -92,6 +97,9 @@ function recomputeBayesPanel() {
   const cShot = parseFloat(els.cShot.value);
   const cHit = parseFloat(els.cHit.value);
   const scarcity = parseFloat(els.scarcity.value);
+  const trials = parseInt(els.trials.value, 10);
+  const magazine = parseInt(els.magazine.value, 10);
+  const noise = parseFloat(els.noise.value);
 
   const { post, num, den } = bayesPosterior(pT, pE_T, pE_D);
   const thr = (cShot * scarcity) / cHit;
@@ -105,9 +113,10 @@ function recomputeBayesPanel() {
   els.cShotVal.textContent = fmtNum(cShot);
   els.cHitVal.textContent = fmtNum(cHit);
   els.scarcityVal.textContent = scarcity.toFixed(1) + "×";
-  els.trialsVal.textContent = fmtInt(parseFloat(els.trials.value));
-  els.noiseVal.textContent = parseFloat(els.noise.value).toFixed(2);
-  els.magazineVal.textContent = fmtInt(parseFloat(els.magazine.value));
+  els.trialsVal.textContent = fmtInt(trials);
+  els.magazineVal.textContent = fmtInt(magazine);
+  els.noiseVal.textContent = noise.toFixed(2);
+
   els.posterior.textContent = fmtPct(post);
   els.threshold.textContent = fmtPct(clamp01(thr));
 
@@ -124,7 +133,7 @@ function recomputeBayesPanel() {
        <span class="mono">(hold loss ≈ ${fmtNum(dec.holdLoss.toFixed(0))} vs shot ≈ ${fmtNum(dec.engageLoss.toFixed(0))})</span>`;
   }
 
-  return { pT, pE_T, pE_D, cShot, cHit, scarcity, magazine: parseInt(els.magazine.value, 10) };
+  return { pT, pE_T, pE_D, cShot, cHit, scarcity, trials, magazine, noise };
 }
 
 function resetMCDisplay() {
@@ -136,54 +145,40 @@ function resetMCDisplay() {
   els.mcStopsPct.textContent = "";
   els.mcHits.textContent = "—";
   els.mcHitsPct.textContent = "";
-  els.mcSummary.textContent = "";
-  els.magazine.value = "300";
   els.mcDeplete.textContent = "—";
-els.mcDepleteNote.textContent = "";
+  els.mcDepleteNote.textContent = "";
+  els.mcSummary.textContent = "";
 }
 
 function runMonteCarlo() {
-  const { pT, pE_T, pE_D, cShot, cHit, scarcity } = recomputeBayesPanel();
-  const trials = parseInt(els.trials.value, 10);
-  const noise = parseFloat(els.noise.value);
+  const { pT, pE_T, pE_D, cShot, cHit, scarcity, trials, magazine, noise } = recomputeBayesPanel();
 
-  
-  
-  // Base likelihood ratio implied by the "evidence" slider parameters.
-  // This is a stylized, single-evidence event model.
   const baseLR = (pE_T / pE_D);
-
-  // Decision threshold in posterior probability
   const thresholdP = (cShot * scarcity) / cHit;
+
   let remaining = magazine;
-  let ranOutAt = null;  // trial index (1-based) when remaining hit 0
+  let ranOutAt = null;
+
   let shots = 0;
-  let wasted = 0;   // decoys shot
-  let stops = 0;    // threats engaged
-  let hits = 0;     // threats not engaged
+  let wasted = 0;
+  let stops = 0;
+  let hits = 0;
 
   for (let i = 0; i < trials; i++) {
     const isThreat = (Math.random() < pT);
-
-    // Generate a noisy LR around baseLR
     const lr = sampleLikelihoodRatio(baseLR, noise);
-
-    // Compute posterior for this track
     const post = posteriorFromOdds(pT, lr);
-
-    // Engage decision
     const engage = (post > thresholdP);
 
-   if (engage && remaining > 0) {
-     remaining--;
-     shots++;
-     if (isThreat) stops++;
-     else wasted++;
-   if (remaining === 0 && ranOutAt === null) ranOutAt = i + 1;
-} else {
-  // If we chose not to engage OR we wanted to but had no interceptors left
-  if (isThreat) hits++;
-}
+    if (engage && remaining > 0) {
+      remaining--;
+      shots++;
+      if (isThreat) stops++;
+      else wasted++;
+      if (remaining === 0 && ranOutAt === null) ranOutAt = i + 1;
+    } else {
+      if (isThreat) hits++;
+    }
   }
 
   const shotsPct = shots / trials;
@@ -194,9 +189,7 @@ function runMonteCarlo() {
   els.mcShotsPct.textContent = fmtPct(shotsPct) + " of tracks";
 
   els.mcWaste.textContent = fmtInt(wasted);
-  els.mcWastePct.textContent = shots > 0
-    ? fmtPct(wastePctOfShots) + " of shots"
-    : "—";
+  els.mcWastePct.textContent = shots > 0 ? fmtPct(wastePctOfShots) + " of shots" : "—";
 
   els.mcStops.textContent = fmtInt(stops);
   els.mcStopsPct.textContent = fmtPct(stops / trials) + " of tracks";
@@ -204,7 +197,14 @@ function runMonteCarlo() {
   els.mcHits.textContent = fmtInt(hits);
   els.mcHitsPct.textContent = fmtPct(hitRate) + " of tracks";
 
-  // Expected cost comparison (toy)
+  if (ranOutAt === null) {
+    els.mcDeplete.textContent = "No";
+    els.mcDepleteNote.textContent = `${fmtInt(remaining)} remaining`;
+  } else {
+    els.mcDeplete.textContent = "Yes";
+    els.mcDepleteNote.textContent = `Ran out at track ${fmtInt(ranOutAt)} (0 remaining)`;
+  }
+
   const effectiveShot = cShot * scarcity;
   const totalShotCost = shots * effectiveShot;
   const totalHitCost = hits * cHit;
@@ -215,29 +215,17 @@ function runMonteCarlo() {
     `hits×Chit = ${fmtNum(totalHitCost.toFixed(0))}, total = ${fmtNum(totalCost.toFixed(0))}. ` +
     `Waste per shot = ${fmtPct(wastePctOfShots)}.`;
 
-  if (ranOutAt === null) {
-  els.mcDeplete.textContent = `No`;
-  els.mcDepleteNote.textContent = `${fmtInt(remaining)} remaining`;
-} else {
-  els.mcDeplete.textContent = `Yes`;
-  els.mcDepleteNote.textContent = `Ran out at track ${fmtInt(ranOutAt)} (0 remaining)`;
-}
-
-  
-  return { shots, wasted, stops, hits };
+  return { shots, wasted, stops, hits, remaining, ranOutAt };
 }
 
 function wireEvents() {
   const live = () => { recomputeBayesPanel(); };
-  ["pT","pE_T","pE_D","cShot","cHit","scarcity","trials","noise"].forEach(id => {
+
+  ["pT","pE_T","pE_D","cShot","cHit","scarcity","trials","magazine","noise"].forEach(id => {
     els[id].addEventListener("input", live);
   });
 
-  els.runBtn.addEventListener("click", () => {
-    // Keep UI responsive for big trials by yielding occasionally
-    // but we keep it simple and fast enough for 50k.
-    runMonteCarlo();
-  });
+  els.runBtn.addEventListener("click", () => runMonteCarlo());
 
   els.resetBtn.addEventListener("click", () => {
     els.pT.value = "0.05";
@@ -247,12 +235,14 @@ function wireEvents() {
     els.cHit.value = "5000";
     els.scarcity.value = "1";
     els.trials.value = "10000";
+    els.magazine.value = "300";
     els.noise.value = "0.60";
     recomputeBayesPanel();
     resetMCDisplay();
   });
 }
 
+// init
 recomputeBayesPanel();
 resetMCDisplay();
 wireEvents();

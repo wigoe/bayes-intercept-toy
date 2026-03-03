@@ -107,7 +107,7 @@ function recomputeBayesPanel() {
   els.scarcityVal.textContent = scarcity.toFixed(1) + "×";
   els.trialsVal.textContent = fmtInt(parseFloat(els.trials.value));
   els.noiseVal.textContent = parseFloat(els.noise.value).toFixed(2);
-
+  els.magazineVal.textContent = fmtInt(parseFloat(els.magazine.value));
   els.posterior.textContent = fmtPct(post);
   els.threshold.textContent = fmtPct(clamp01(thr));
 
@@ -124,7 +124,7 @@ function recomputeBayesPanel() {
        <span class="mono">(hold loss ≈ ${fmtNum(dec.holdLoss.toFixed(0))} vs shot ≈ ${fmtNum(dec.engageLoss.toFixed(0))})</span>`;
   }
 
-  return { pT, pE_T, pE_D, cShot, cHit, scarcity };
+  return { pT, pE_T, pE_D, cShot, cHit, scarcity, magazine: parseInt(els.magazine.value, 10) };
 }
 
 function resetMCDisplay() {
@@ -137,6 +137,9 @@ function resetMCDisplay() {
   els.mcHits.textContent = "—";
   els.mcHitsPct.textContent = "";
   els.mcSummary.textContent = "";
+  els.magazine.value = "300";
+  els.mcDeplete.textContent = "—";
+els.mcDepleteNote.textContent = "";
 }
 
 function runMonteCarlo() {
@@ -144,13 +147,16 @@ function runMonteCarlo() {
   const trials = parseInt(els.trials.value, 10);
   const noise = parseFloat(els.noise.value);
 
+  
+  
   // Base likelihood ratio implied by the "evidence" slider parameters.
   // This is a stylized, single-evidence event model.
   const baseLR = (pE_T / pE_D);
 
   // Decision threshold in posterior probability
   const thresholdP = (cShot * scarcity) / cHit;
-
+  let remaining = magazine;
+  let ranOutAt = null;  // trial index (1-based) when remaining hit 0
   let shots = 0;
   let wasted = 0;   // decoys shot
   let stops = 0;    // threats engaged
@@ -168,13 +174,16 @@ function runMonteCarlo() {
     // Engage decision
     const engage = (post > thresholdP);
 
-    if (engage) {
-      shots++;
-      if (isThreat) stops++;
-      else wasted++;
-    } else {
-      if (isThreat) hits++;
-    }
+   if (engage && remaining > 0) {
+     remaining--;
+     shots++;
+     if (isThreat) stops++;
+     else wasted++;
+   if (remaining === 0 && ranOutAt === null) ranOutAt = i + 1;
+} else {
+  // If we chose not to engage OR we wanted to but had no interceptors left
+  if (isThreat) hits++;
+}
   }
 
   const shotsPct = shots / trials;
@@ -206,6 +215,15 @@ function runMonteCarlo() {
     `hits×Chit = ${fmtNum(totalHitCost.toFixed(0))}, total = ${fmtNum(totalCost.toFixed(0))}. ` +
     `Waste per shot = ${fmtPct(wastePctOfShots)}.`;
 
+  if (ranOutAt === null) {
+  els.mcDeplete.textContent = `No`;
+  els.mcDepleteNote.textContent = `${fmtInt(remaining)} remaining`;
+} else {
+  els.mcDeplete.textContent = `Yes`;
+  els.mcDepleteNote.textContent = `Ran out at track ${fmtInt(ranOutAt)} (0 remaining)`;
+}
+
+  
   return { shots, wasted, stops, hits };
 }
 
